@@ -1,129 +1,100 @@
 package Package;
 
-import generated.tables.Customer;
-import generated.tables.records.AccountRecord;
-import org.jooq.*;
-import org.jooq.conf.Settings;
-import org.jooq.impl.DSL;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.NestedExceptionUtils;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Controller;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
-import generated.tables.Account;
+import java.util.List;
+import java.util.Optional;
 
-import javax.xml.bind.JAXB;
-import java.io.File;
-import java.math.BigDecimal;
-import java.sql.Connection;
-import java.sql.DriverManager;
+@Controller
+@Transactional
+@RequestMapping(path = "/account")
+public class AccountController {
+    @Autowired
+    private AccountRepository accountRepository;
 
-@RestController
-public class AccountController extends DBConnection{
+    @Transactional(propagation = Propagation.REQUIRED)
+    @GetMapping(path="{accountidfrom}/transfer/{accountidto}/{amount}")
 
-    public AccountController()
-    {
+    public @ResponseBody  Account TransferMoney(@PathVariable(value="accountidfrom") Integer accountidfrom,
+                          @PathVariable(value="accountidto") Integer accountidto,
+                          @PathVariable(value="amount") Integer amount){
+        try{
+            Account account = WithDrawMoney(accountidfrom,amount);
+            DepositMoney(accountidto,amount);
+            return account;
+        }
+        catch (InsufficientBalanceException ex){
 
+        }
+        catch (ResponseStatusException ex){
+
+        }
+        return null;
     }
 
-    @RequestMapping(value = "/TransferMoney",method = RequestMethod.GET)
-    public String TransferMoney(@RequestParam(required = true) Integer AccountFrom,
-                   @RequestParam(required = true) BigDecimal Amount,
-                   @RequestParam(required = true) Integer AccountTo)
+    @GetMapping(path="/{accountId}")
+    public @ResponseBody
+    Account GetAccount(@PathVariable(value="accountId") Integer accountId){
+        try {
+            return accountRepository.findById(accountId).get();
+        }
+        catch(Exception ex){
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Account Not Found",ex);
+        }
+    }
+
+
+    @GetMapping(path="/deposit/{accountId}/{amount}")
+    public @ResponseBody
+    Account DepositMoney(@PathVariable(value="accountId") Integer accountId,
+                          @PathVariable(value="amount") Integer amount)
     {
         try {
+            Account account = accountRepository.findById(accountId).get();
+            account.setBalance(account.getBalance() + amount);
+            accountRepository.save(account);
+            return account;
+        }
+        catch(ResponseStatusException ex){
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Account Not Found",ex);
+        }
+    }
 
-            DSLContext create = DSL.using(conn, SQLDialect.MYSQL);
-
-            AccountRecord accountFrom = create.fetchOne(Account.ACCOUNT,Account.ACCOUNT.ID.eq(AccountFrom));
-            AccountRecord accountTo = create.fetchOne(Account.ACCOUNT,Account.ACCOUNT.ID.eq(AccountTo));
-
-            if (AccountFrom != null && accountTo != null) {
-                if (WithdrawAmount(AccountFrom, Amount)) {
-                    if (DepositAmount(AccountTo, Amount)) {
-                        return "Success";
-                    } else {
-                        return "Could not transfer funds";
-                    }
-                } else
-                    return "Error - Not Enough Funds";
+    @GetMapping(path="/withdraw/{accountId}/{amount}")
+    public @ResponseBody
+    Account WithDrawMoney(@PathVariable(value="accountId") Integer accountId,
+                          @PathVariable(value="amount") Integer amount)
+    throws InsufficientBalanceException
+    {
+        try {
+            Account account = accountRepository.findById(accountId).get();
+            Double newBalance = account.getBalance() - amount;
+            if (newBalance >= 0){
+                account.setBalance(newBalance);
+                accountRepository.save(account);
+                return account;
             }
             else
-                return "Receiving account does not exist";
+                throw new InsufficientBalanceException("AccountID " + accountId +" does not have enough funds");
         }
-        catch (Exception ex)
-        {
-            return "Error";
+        catch(ResponseStatusException ex){
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Account Not Found",ex);
         }
     }
 
-
-    @RequestMapping(value = "/CreateAccount",method = RequestMethod.GET)
-    public Integer CreateAccount(@RequestParam(required = true) Integer CustomerId,
-                                 @RequestParam(required = true) BigDecimal InitialAmount)
+    @ResponseStatus
+    public class InsufficientBalanceException extends Exception
     {
-        try
-        {
-
-        DSLContext create = DSL.using(conn, SQLDialect.MYSQL);
-        AccountRecord result = create.insertInto(Account.ACCOUNT, Account.ACCOUNT.CUSTOMERID, Account.ACCOUNT.BALANCE)
-                .values(CustomerId,InitialAmount)
-                        .returning(Account.ACCOUNT.ID)
-                        .fetchOne();
-            return result.getId();
-        }
-        catch   (Exception ex)
-        {
-            return 0;
-        }
-
-
-    }
-
-
-    @RequestMapping(value = "/DepositAmount",method = RequestMethod.GET)
-    public Boolean DepositAmount(@RequestParam(required = true) Integer AccountID,
-                                 @RequestParam(required = true) BigDecimal Amount)
-    {
-
-        try
-        {
-            DSLContext create = DSL.using(conn, SQLDialect.MYSQL);
-            int id = create.update(Account.ACCOUNT).set(Account.ACCOUNT.BALANCE,(Account.ACCOUNT.BALANCE.add(Amount)))
-                    .where(Account.ACCOUNT.ID.eq(AccountID))
-                    .returning(Account.ACCOUNT.ID)
-                    .execute();
-            return (id > 0) ? true : false;
-        }
-        catch   (Exception ex)
-        {
-            return false;
+        public InsufficientBalanceException(String message){
+           super(message);
         }
     }
 
-    @RequestMapping(value = "/WithdrawAmount",method = RequestMethod.GET)
-    public Boolean WithdrawAmount(@RequestParam(required = true) Integer AccountID,
-                                 @RequestParam(required = true) BigDecimal Amount)
-    {
-
-        try
-        {
-            DSLContext create = DSL.using(conn, SQLDialect.MYSQL);
-            AccountRecord account = create.fetchOne(Account.ACCOUNT,Account.ACCOUNT.ID.eq(AccountID));
-            BigDecimal num = new BigDecimal(0);
-            if (num.compareTo(account.getBalance().subtract(Amount)) <= 0)
-            {
-                account.setBalance(account.getBalance().subtract(Amount));
-                account.store();
-                return true;
-            }
-            else
-                return false;
-
-        }
-        catch   (Exception ex)
-        {
-            return false;
-        }
-    }
 }

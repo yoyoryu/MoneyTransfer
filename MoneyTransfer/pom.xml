@@ -35,62 +35,13 @@
             <version>8.0.15</version>
         </dependency>
         <dependency>
-            <groupId>org.jooq</groupId>
-            <artifactId>jooq</artifactId>
-            <version>3.11.10</version>
-        </dependency>
-        <dependency>
-            <groupId>org.jooq</groupId>
-            <artifactId>jooq-meta</artifactId>
-            <version>3.11.10</version>
-        </dependency>
-        <dependency>
-            <groupId>org.jooq</groupId>
-            <artifactId>jooq-codegen</artifactId>
-            <version>3.11.10</version>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
     </dependencies>
 
     <build>
         <plugins>
-            <plugin>
-                <groupId>org.jooq</groupId>
-                <artifactId>jooq-codegen-maven</artifactId>
-                <executions>
-                    <execution>
-                    <goals>
-                        <goal>generate</goal>
-                    </goals>
-                    </execution>
-                </executions>
-                <dependencies>
-                    <dependency>
-                        <groupId>mysql</groupId>
-                        <artifactId>mysql-connector-java</artifactId>
-                        <version>8.0.15</version>
-                    </dependency>
-                </dependencies>
-                <configuration>
-                    <jdbc>
-                        <driver>com.mysql.jdbc.Driver</driver>
-                        <url>jdbc:mysql://localhost:3306/moneytransfer</url>
-                        <user>root</user>
-                        <password>pass</password>
-                    </jdbc>
-                    <generator>
-                        <database>
-                            <name>org.jooq.meta.mysql.MySQLDatabase</name>
-                            <inputSchema>moneytransfer</inputSchema>
-                            <includes>.*</includes>
-                            <excludes></excludes>
-                        </database>
-                        <target>
-                            <packageName>generated</packageName>
-                            <directory>target/generated-sources/jooq</directory>
-                        </target>
-                    </generator>
-                </configuration>
-            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
