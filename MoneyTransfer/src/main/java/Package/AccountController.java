@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import javax.annotation.Resource;
 import java.util.List;
 import java.util.Optional;
 
@@ -16,34 +17,36 @@ import java.util.Optional;
 @Transactional
 @RequestMapping(path = "/account")
 public class AccountController {
-    @Autowired
-    private AccountRepository accountRepository;
+    //@Autowired
+    //private AccountRepository accountRepository;
+
+    @Resource
+    private AccountService accountService;
+
 
     @Transactional(propagation = Propagation.REQUIRED)
     @GetMapping(path="{accountidfrom}/transfer/{accountidto}/{amount}")
 
     public @ResponseBody  Account TransferMoney(@PathVariable(value="accountidfrom") Integer accountidfrom,
                           @PathVariable(value="accountidto") Integer accountidto,
-                          @PathVariable(value="amount") Integer amount){
+                          @PathVariable(value="amount") Double amount){
         try{
-            Account account = WithDrawMoney(accountidfrom,amount);
-            DepositMoney(accountidto,amount);
+            Account account = accountService.moneyTransfer(accountidfrom,accountidto,amount);
             return account;
         }
+        catch (AccountNotFoundException ex){
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Account Not Found",ex);
+        }
         catch (InsufficientBalanceException ex){
-
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"Not Enough Funds",ex);
         }
-        catch (ResponseStatusException ex){
-
-        }
-        return null;
     }
 
     @GetMapping(path="/{accountId}")
     public @ResponseBody
     Account GetAccount(@PathVariable(value="accountId") Integer accountId){
         try {
-            return accountRepository.findById(accountId).get();
+            return accountService.findById(accountId);
         }
         catch(Exception ex){
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Account Not Found",ex);
@@ -51,7 +54,7 @@ public class AccountController {
     }
 
 
-    @GetMapping(path="/deposit/{accountId}/{amount}")
+    /*@GetMapping(path="/deposit/{accountId}/{amount}")
     public @ResponseBody
     Account DepositMoney(@PathVariable(value="accountId") Integer accountId,
                           @PathVariable(value="amount") Integer amount)
@@ -65,36 +68,41 @@ public class AccountController {
         catch(ResponseStatusException ex){
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Account Not Found",ex);
         }
+    }*/
+
+    @GetMapping(path="/deposit/{accountId}/{amount}")
+    public @ResponseBody
+    Account DepositMoney(@PathVariable(value="accountId") Integer accountId,
+                         @PathVariable(value="amount") Double amount)
+    {
+        try {
+           Account account = accountService.deposit(accountId,amount);
+           return account;
+
+        }
+        catch(ResponseStatusException ex){
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Account Not Found",ex);
+        }
+        catch(AccountNotFoundException ex){
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Account Not Found",ex);
+        }
     }
 
     @GetMapping(path="/withdraw/{accountId}/{amount}")
     public @ResponseBody
     Account WithDrawMoney(@PathVariable(value="accountId") Integer accountId,
-                          @PathVariable(value="amount") Integer amount)
-    throws InsufficientBalanceException
+                          @PathVariable(value="amount") Double amount)
+    throws InsufficientBalanceException, AccountNotFoundException
     {
         try {
-            Account account = accountRepository.findById(accountId).get();
-            Double newBalance = account.getBalance() - amount;
-            if (newBalance >= 0){
-                account.setBalance(newBalance);
-                accountRepository.save(account);
+                Account account = accountService.withdraw(accountId,amount);
                 return account;
             }
-            else
-                throw new InsufficientBalanceException("AccountID " + accountId +" does not have enough funds");
-        }
-        catch(ResponseStatusException ex){
+        catch (AccountNotFoundException ex){
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Account Not Found",ex);
         }
-    }
-
-    @ResponseStatus
-    public class InsufficientBalanceException extends Exception
-    {
-        public InsufficientBalanceException(String message){
-           super(message);
+        catch (InsufficientBalanceException ex){
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Not Enough Money in Account",ex);
         }
     }
-
 }
